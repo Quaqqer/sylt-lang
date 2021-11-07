@@ -178,6 +178,7 @@ pub fn path_to_module(current_file: &Path, module: &str) -> PathBuf {
 
 mod test {
     use super::Error;
+    use super::{Path, PathBuf};
 
     #[allow(dead_code)]
     pub fn count_errors(errs: &[Error]) -> (i32, i32, i32) {
@@ -206,7 +207,7 @@ mod test {
     }
 
     #[allow(dead_code)]
-    pub fn parse_test_settings(contents: String) -> TestSettings {
+    pub fn parse_test_settings(contents: String) -> Result<TestSettings, ()> {
         let mut print = true;
         let mut syntax_errors = 0;
         let mut type_errors = 0;
@@ -224,8 +225,8 @@ mod test {
                     Some('#') => {
                         runtime_errors += 1;
                     }
-                    x => {
-                        panic!("Failed to parse test-file, unknown error prefix {:?}", x);
+                    _ => {
+                        return Err(());
                     }
                 }
             } else if line.starts_with("// flags: ") {
@@ -242,160 +243,244 @@ mod test {
             }
         }
 
-        TestSettings { print, syntax_errors, type_errors, runtime_errors }
+        Ok(TestSettings { print, syntax_errors, type_errors, runtime_errors })
     }
-}
 
-#[macro_export]
-macro_rules! assert_errs {
-    ($result:expr, $expect:pat) => {
-        let errs = $result.err().unwrap_or(Vec::new());
+    fn find_test_paths(directory: &Path) -> Vec<PathBuf> {
+        let mut tests = Vec::new();
 
-        #[allow(unused_imports)]
-        use sylt_common::error::Error;
-        #[allow(unused_imports)]
-        use sylt_tokenizer::Span;
-        if !matches!(errs.as_slice(), $expect) {
-            eprintln!("===== Expected =====");
-            eprint!("{}\n\n", stringify!($expect));
-            assert!(false);
+        for entry in std::fs::read_dir(directory).expect(&format!(
+            "Cannot find any tests comming from {}",
+            directory.to_string_lossy()
+        )) {
+            let path = entry.unwrap().path();
+            let file_name = path.file_name().unwrap().to_str().unwrap();
+
+            if file_name.starts_with("_") {
+                continue;
+            }
+
+            if path.is_dir() {
+                tests.extend(find_test_paths(&path));
+            } else {
+                if !file_name.ends_with(".sy") {
+                    continue;
+                }
+
+                tests.push(path);
+            }
         }
-    };
-}
 
-#[cfg(test)]
-mod bytecode {
+        tests
+    }
 
-    #[macro_export]
-    macro_rules! test_file_run {
-        ($fn:ident, $path:literal) => {
-            #[test]
-            fn $fn() {
-                use crate::test::{count_errors, parse_test_settings};
-                #[allow(unused_imports)]
-                use sylt_common::error::RuntimeError;
-                #[allow(unused_imports)]
-                use sylt_common::error::TypeError;
-                #[allow(unused_imports)]
-                use sylt_common::Type;
+    #[test]
+    fn bytecode_fast() {
+        let mut run = 0;
+        let mut failed_tests = Vec::new();
+        for test in find_test_paths(&PathBuf::from("../tests/")) {
+            run += 1;
+            let contents = std::fs::read_to_string(test.clone()).expect(&format!(
+                "Failed to read file file: {}",
+                test.to_string_lossy()
+            ));
+            let settings = match parse_test_settings(contents) {
+                Ok(settings) => settings,
+                Err(_) => {
+                    eprintln!(">>> {:?} - failed", &test);
+                    eprintln!("Failed to parse the test");
+                    failed_tests.push(test);
+                    continue;
+                }
+            };
 
-                let mut args = $crate::Args::default();
-                let file = format!("../{}", $path);
-                let contents = std::fs::read_to_string(file.clone()).unwrap();
-                let settings = parse_test_settings(contents);
-                args.args = vec![file];
-                args.verbosity = if settings.print { 1 } else { 0 };
+            let mut args = crate::Args::default();
+            args.args.push(test.to_string_lossy().to_string());
+            args.verbosity = if settings.print { 1 } else { 0 };
+            args.verbosity = 0;
 
-                let (syn, ty, run) = match $crate::run_file(&args, ::sylt_std::sylt::_sylt_link()) {
-                    Err(res) => {
-                        println!("===== Got Errors =====");
-                        for err in &res {
-                            print!("{}", err);
-                        }
-                        count_errors(&res)
-                    }
-                    Ok(_) => {
-                        println!("===== Ran Correctly =====");
-                        (0, 0, 0)
-                    }
+            let ((syn, ty, run), errs) =
+                match crate::run_file(&args, ::sylt_std::sylt::_sylt_link()) {
+                    Err(res) => (count_errors(&res), res),
+                    Ok(_) => ((0, 0, 0), Vec::new()),
                 };
-                println!(" {} {} {}", syn, ty, run);
-                println!("===== Expected =====");
-                println!(
-                    " {} {} {}",
+
+            if syn != settings.syntax_errors
+                || ty != settings.type_errors
+                || run != settings.runtime_errors
+            {
+                eprintln!(">>> {:?} - failed", test);
+                eprintln!(" Got: {} {} {}", syn, ty, run);
+                eprintln!(
+                    " Exp: {} {} {}",
                     settings.syntax_errors, settings.type_errors, settings.runtime_errors
                 );
-                assert_eq!(syn, settings.syntax_errors);
-                assert_eq!(ty, settings.type_errors);
-                assert_eq!(run, settings.runtime_errors);
-            }
-        };
-    }
-
-    sylt_macro::find_tests!(test_file_run);
-}
-
-#[cfg(test)]
-mod lua {
-    #[macro_export]
-    macro_rules! test_file_lua {
-        ($fn:ident, $path:literal) => {
-            #[test]
-            fn $fn() {
-                use crate::test::{count_errors, parse_test_settings};
-                use std::io::Write;
-                use std::process::{Command, Stdio};
-                #[allow(unused_imports)]
-                use sylt_common::error::RuntimeError;
-                #[allow(unused_imports)]
-                use sylt_common::error::TypeError;
-                #[allow(unused_imports)]
-                use sylt_common::Type;
-
-                let mut args = $crate::Args::default();
-                let file = format!("../{}", $path);
-                let contents = std::fs::read_to_string(file.clone()).unwrap();
-                let settings = parse_test_settings(contents);
-                args.args = vec![file];
-                args.verbosity = if settings.print { 1 } else { 0 };
-
-                let mut child = Command::new("lua")
-                    .stdin(Stdio::piped())
-                    .stderr(Stdio::piped())
-                    .stdout(Stdio::piped())
-                    .spawn()
-                    .expect(concat!("Failed to start lua, testing:", $path));
-
-                let stdin = child.stdin.take().unwrap();
-                let writer: Option<Box<dyn Write>> = Some(Box::new(stdin));
-                let res = $crate::compile_with_reader_to_writer(
-                    &args,
-                    ::sylt_std::sylt::_sylt_link(),
-                    $crate::read_file,
-                    writer,
-                );
-
-                let (syn, ty, _) = match res {
-                    Err(res) => {
-                        println!("===== Compile Errors =====");
-                        for err in &res {
-                            print!("{}", err);
-                        }
-                        count_errors(&res)
-                    }
-                    Ok(_) => {
-                        println!("===== Compiled Correctly =====");
-                        (0, 0, 0)
-                    }
-                };
-                assert_eq!(syn, settings.syntax_errors);
-                assert_eq!(ty, settings.type_errors);
-
-                let output = child.wait_with_output().unwrap();
-                // HACK(ed): Status is always 0 when piping to STDIN, atleast on my version of lua,
-                // so we check stderr - which is a bad idea.
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let success = output.status.success() && stderr.is_empty();
-                println!("Success: {}", success);
-                if settings.runtime_errors != 0 {
-                    assert!(
-                        !success,
-                        "Program ran to completion when it should crash\n:STDOUT:\n{}\n\n:STDERR:\n{}\n",
-                        stdout,
-                        stderr
-                    );
-                } else {
-                    assert!(
-                        success,
-                        "Failed when it should succeed\n:STDOUT:\n{}\n\n:STDERR:\n{}\n",
-                        stdout,
-                        stderr
-                    );
+                eprintln!(" ==== Errors ====");
+                for err in &errs {
+                    print!("{}", err);
                 }
+                failed_tests.push(test);
             }
-        };
+        }
+        eprintln!("\n\n ==== Summary ====");
+        for test in failed_tests.iter() {
+            eprintln!(">>> {:?} - failed", &test);
+        }
+        eprintln!(" failed {} / total {}", failed_tests.len(), run);
+        assert_eq!(failed_tests.len(), 0, "No tests should fail");
     }
-
-    sylt_macro::find_tests!(test_file_lua);
 }
+
+// #[macro_export]
+// macro_rules! assert_errs {
+//     ($result:expr, $expect:pat) => {
+//         let errs = $result.err().unwrap_or(Vec::new());
+//
+//         #[allow(unused_imports)]
+//         use sylt_common::error::Error;
+//         #[allow(unused_imports)]
+//         use sylt_tokenizer::Span;
+//         if !matches!(errs.as_slice(), $expect) {
+//             eprintln!("===== Expected =====");
+//             eprint!("{}\n\n", stringify!($expect));
+//             assert!(false);
+//         }
+//     };
+// }
+//
+// #[cfg(test)]
+// mod bytecode {
+//
+//     #[macro_export]
+//     macro_rules! test_file_run {
+//         ($fn:ident, $path:literal) => {
+//             #[test]
+//             fn $fn() {
+//                 use crate::test::{count_errors, parse_test_settings};
+//                 #[allow(unused_imports)]
+//                 use sylt_common::error::RuntimeError;
+//                 #[allow(unused_imports)]
+//                 use sylt_common::error::TypeError;
+//                 #[allow(unused_imports)]
+//                 use sylt_common::Type;
+//
+//                 let mut args = $crate::Args::default();
+//                 let file = format!("../{}", $path);
+//                 let contents = std::fs::read_to_string(file.clone()).unwrap();
+//                 let settings = parse_test_settings(contents);
+//                 args.args = vec![file];
+//                 args.verbosity = if settings.print { 1 } else { 0 };
+//
+//                 let (syn, ty, run) = match $crate::run_file(&args, ::sylt_std::sylt::_sylt_link()) {
+//                     Err(res) => {
+//                         println!("===== Got Errors =====");
+//                         for err in &res {
+//                             print!("{}", err);
+//                         }
+//                         count_errors(&res)
+//                     }
+//                     Ok(_) => {
+//                         println!("===== Ran Correctly =====");
+//                         (0, 0, 0)
+//                     }
+//                 };
+//                 println!(" {} {} {}", syn, ty, run);
+//                 println!("===== Expected =====");
+//                 println!(
+//                     " {} {} {}",
+//                     settings.syntax_errors, settings.type_errors, settings.runtime_errors
+//                 );
+//                 assert_eq!(syn, settings.syntax_errors);
+//                 assert_eq!(ty, settings.type_errors);
+//                 assert_eq!(run, settings.runtime_errors);
+//             }
+//         };
+//     }
+//
+//     sylt_macro::find_tests!(test_file_run);
+// }
+//
+// #[cfg(test)]
+// mod lua {
+//     #[macro_export]
+//     macro_rules! test_file_lua {
+//         ($fn:ident, $path:literal) => {
+//             #[test]
+//             fn $fn() {
+//                 use crate::test::{count_errors, parse_test_settings};
+//                 use std::io::Write;
+//                 use std::process::{Command, Stdio};
+//                 #[allow(unused_imports)]
+//                 use sylt_common::error::RuntimeError;
+//                 #[allow(unused_imports)]
+//                 use sylt_common::error::TypeError;
+//                 #[allow(unused_imports)]
+//                 use sylt_common::Type;
+//
+//                 let mut args = $crate::Args::default();
+//                 let file = format!("../{}", $path);
+//                 let contents = std::fs::read_to_string(file.clone()).unwrap();
+//                 let settings = parse_test_settings(contents);
+//                 args.args = vec![file];
+//                 args.verbosity = if settings.print { 1 } else { 0 };
+//
+//                 let mut child = Command::new("lua")
+//                     .stdin(Stdio::piped())
+//                     .stderr(Stdio::piped())
+//                     .stdout(Stdio::piped())
+//                     .spawn()
+//                     .expect(concat!("Failed to start lua, testing:", $path));
+//
+//                 let stdin = child.stdin.take().unwrap();
+//                 let writer: Option<Box<dyn Write>> = Some(Box::new(stdin));
+//                 let res = $crate::compile_with_reader_to_writer(
+//                     &args,
+//                     ::sylt_std::sylt::_sylt_link(),
+//                     $crate::read_file,
+//                     writer,
+//                 );
+//
+//                 let (syn, ty, _) = match res {
+//                     Err(res) => {
+//                         println!("===== Compile Errors =====");
+//                         for err in &res {
+//                             print!("{}", err);
+//                         }
+//                         count_errors(&res)
+//                     }
+//                     Ok(_) => {
+//                         println!("===== Compiled Correctly =====");
+//                         (0, 0, 0)
+//                     }
+//                 };
+//                 assert_eq!(syn, settings.syntax_errors);
+//                 assert_eq!(ty, settings.type_errors);
+//
+//                 let output = child.wait_with_output().unwrap();
+//                 // HACK(ed): Status is always 0 when piping to STDIN, atleast on my version of lua,
+//                 // so we check stderr - which is a bad idea.
+//                 let stderr = String::from_utf8_lossy(&output.stderr);
+//                 let stdout = String::from_utf8_lossy(&output.stdout);
+//                 let success = output.status.success() && stderr.is_empty();
+//                 println!("Success: {}", success);
+//                 if settings.runtime_errors != 0 {
+//                     assert!(
+//                         !success,
+//                         "Program ran to completion when it should crash\n:STDOUT:\n{}\n\n:STDERR:\n{}\n",
+//                         stdout,
+//                         stderr
+//                     );
+//                 } else {
+//                     assert!(
+//                         success,
+//                         "Failed when it should succeed\n:STDOUT:\n{}\n\n:STDERR:\n{}\n",
+//                         stdout,
+//                         stderr
+//                     );
+//                 }
+//             }
+//         };
+//     }
+//
+//     sylt_macro::find_tests!(test_file_lua);
+// }

@@ -555,75 +555,75 @@ pub fn format(args: &Args) -> Result<String, Vec<Error>> {
     Ok(format_module(tree.modules.remove(0).1).unwrap())
 }
 
-#[cfg(test)]
-macro_rules! test_formatter_on_file {
-    ($fn:ident, $path:literal) => {
-        #[test]
-        fn $fn() {
-            use crate::test::{count_errors, parse_test_settings};
-            use std::path::{Path, PathBuf};
-            #[allow(unused_imports)]
-            use sylt_common::{
-                error::{Error, RuntimeError, TypeError},
-                Type,
-            };
-            #[allow(unused_imports)]
-            use sylt_tokenizer::Span;
-
-            let path = format!("../{}", $path);
-
-            let contents = std::fs::read_to_string(path.clone()).unwrap();
-            let settings = parse_test_settings(contents);
-
-            // Run the file before the formatter.
-            let mut args = $crate::Args::default();
-            args.args = vec![path.clone()];
-            let before = $crate::run_file(&args, ::sylt_std::sylt::_sylt_link());
-
-            // If the test fails here, we already have / will have prettified output.
-            let (syn, ty, run) = count_errors(&before.err().unwrap_or(Vec::new()));
-            assert_eq!(syn, settings.syntax_errors);
-            assert_eq!(ty, settings.type_errors);
-            assert_eq!(run, settings.runtime_errors);
-
-            // We now know that before contains $errs exactly.
-
-            // Format the file.
-            match $crate::formatter::format(&args) {
-                Ok(formatted) => {
-                    let formatted_path = PathBuf::from(&path).canonicalize().unwrap();
-                    let read_formatted_or_file = |path: &Path| {
-                        if path.canonicalize().unwrap() == formatted_path {
-                            Ok(formatted.clone())
-                        } else {
-                            $crate::read_file(path)
-                        }
-                    };
-
-                    // Try to run the file again, this time with pretty "got/expected"-output.
-                    let after = $crate::run_file_with_reader(
-                        &args,
-                        ::sylt_std::sylt::_sylt_link(),
-                        read_formatted_or_file,
-                    );
-                    eprintln!("The test output changed between before and after formatting");
-                    let (syn, ty, run) = count_errors(&after.err().unwrap_or(Vec::new()));
-                    assert_eq!(syn, settings.syntax_errors);
-                    assert_eq!(ty, settings.type_errors);
-                    assert_eq!(run, settings.runtime_errors);
-                }
-                Err(errs) => {
-                    eprintln!("The formatter couldn't parse the file but the syntax errors");
-                    eprintln!("changed between before and after formatting.");
-                    let (syn, ty, run) = count_errors(&errs);
-                    assert_eq!(syn, settings.syntax_errors);
-                    assert_eq!(ty, settings.type_errors);
-                    assert_eq!(run, settings.runtime_errors);
-                }
-            }
-        }
-    };
-}
-
-#[cfg(test)]
-sylt_macro::find_tests!(test_formatter_on_file);
+// #[cfg(test)]
+// macro_rules! test_formatter_on_file {
+//     ($fn:ident, $path:literal) => {
+//         #[test]
+//         fn $fn() {
+//             use crate::test::{count_errors, parse_test_settings};
+//             use std::path::{Path, PathBuf};
+//             #[allow(unused_imports)]
+//             use sylt_common::{
+//                 error::{Error, RuntimeError, TypeError},
+//                 Type,
+//             };
+//             #[allow(unused_imports)]
+//             use sylt_tokenizer::Span;
+//
+//             let path = format!("../{}", $path);
+//
+//             let contents = std::fs::read_to_string(path.clone()).unwrap();
+//             let settings = parse_test_settings(contents);
+//
+//             // Run the file before the formatter.
+//             let mut args = $crate::Args::default();
+//             args.args = vec![path.clone()];
+//             let before = $crate::run_file(&args, ::sylt_std::sylt::_sylt_link());
+//
+//             // If the test fails here, we already have / will have prettified output.
+//             let (syn, ty, run) = count_errors(&before.err().unwrap_or(Vec::new()));
+//             assert_eq!(syn, settings.syntax_errors);
+//             assert_eq!(ty, settings.type_errors);
+//             assert_eq!(run, settings.runtime_errors);
+//
+//             // We now know that before contains $errs exactly.
+//
+//             // Format the file.
+//             match $crate::formatter::format(&args) {
+//                 Ok(formatted) => {
+//                     let formatted_path = PathBuf::from(&path).canonicalize().unwrap();
+//                     let read_formatted_or_file = |path: &Path| {
+//                         if path.canonicalize().unwrap() == formatted_path {
+//                             Ok(formatted.clone())
+//                         } else {
+//                             $crate::read_file(path)
+//                         }
+//                     };
+//
+//                     // Try to run the file again, this time with pretty "got/expected"-output.
+//                     let after = $crate::run_file_with_reader(
+//                         &args,
+//                         ::sylt_std::sylt::_sylt_link(),
+//                         read_formatted_or_file,
+//                     );
+//                     eprintln!("The test output changed between before and after formatting");
+//                     let (syn, ty, run) = count_errors(&after.err().unwrap_or(Vec::new()));
+//                     assert_eq!(syn, settings.syntax_errors);
+//                     assert_eq!(ty, settings.type_errors);
+//                     assert_eq!(run, settings.runtime_errors);
+//                 }
+//                 Err(errs) => {
+//                     eprintln!("The formatter couldn't parse the file but the syntax errors");
+//                     eprintln!("changed between before and after formatting.");
+//                     let (syn, ty, run) = count_errors(&errs);
+//                     assert_eq!(syn, settings.syntax_errors);
+//                     assert_eq!(ty, settings.type_errors);
+//                     assert_eq!(run, settings.runtime_errors);
+//                 }
+//             }
+//         }
+//     };
+// }
+//
+// #[cfg(test)]
+// sylt_macro::find_tests!(test_formatter_on_file);
