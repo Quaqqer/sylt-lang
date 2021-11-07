@@ -183,65 +183,6 @@ pub fn link(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
     proc_macro::TokenStream::from(tokens)
 }
 
-struct TestSettings {
-    errors: String,
-    print: bool,
-    // Used to tell lua there are runtime errors - since it doesn't care about the type.
-    any_runtime_errors: bool,
-}
-
-impl Default for TestSettings {
-    fn default() -> Self {
-        Self {
-            errors: String::new(),
-            print: true,
-            any_runtime_errors: false,
-        }
-    }
-}
-
-fn parse_test_settings(contents: String) -> TestSettings {
-    let mut settings = TestSettings::default();
-
-    let mut errors = Vec::new();
-    for line in contents.split("\n") {
-        if line.starts_with("// error: ") {
-            let mut line = line.strip_prefix("// error: ").unwrap().to_string();
-            if line.starts_with("$") {
-                line = format!("Error::TypeError {{ kind: TypeError::{}, .. }}", &line[1..]);
-            }
-            if line.starts_with("#") {
-                line = format!(
-                    "Error::RuntimeError {{ kind: RuntimeError::{}, .. }}",
-                    &line[1..]
-                );
-            }
-            if line.starts_with("@") {
-                line = format!(
-                    "Error::SyntaxError {{ span: Span {{ line: {}, ..}}, .. }}",
-                    &line[1..]
-                );
-            }
-            settings.any_runtime_errors |= line.contains("RuntimeError");
-            errors.push(line);
-        } else if line.starts_with("// flags: ") {
-            for flag in line.split(" ").skip(2) {
-                match flag {
-                    "no_print" => {
-                        settings.print = false;
-                    }
-                    _ => {
-                        panic!("Unknown test flag '{}'", flag);
-                    }
-                }
-            }
-        }
-    }
-
-    settings.errors = format!("[ {} ]", errors.join(", "));
-    settings
-}
-
 fn find_test_paths(directory: &Path, macro_path: &syn::Path) -> proc_macro2::TokenStream {
     let mut tests = quote! {};
 
@@ -267,14 +208,8 @@ fn find_test_paths(directory: &Path, macro_path: &syn::Path) -> proc_macro2::Tok
             let path_string = path.to_str().unwrap();
             let test_name = format_ident!("{}", file_name.replace(".sy", ""));
 
-            let settings = parse_test_settings(std::fs::read_to_string(path.clone()).unwrap());
-            let any_runtime_errors = settings.any_runtime_errors;
-            let print = settings.print;
-            let wanted_errs: proc_macro2::TokenStream = settings.errors.parse().unwrap();
-
-            // TODO(ed): Make a flag for skipping the test
             let tokens = quote! {
-                #macro_path!(#test_name, #path_string, #print, #wanted_errs, #any_runtime_errors);
+                #macro_path!(#test_name, #path_string);
             };
 
             tests.extend(tokens);

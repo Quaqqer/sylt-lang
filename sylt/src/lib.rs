@@ -176,6 +176,76 @@ pub fn path_to_module(current_file: &Path, module: &str) -> PathBuf {
     res
 }
 
+mod test {
+    use super::Error;
+
+    #[allow(dead_code)]
+    pub fn count_errors(errs: &[Error]) -> (i32, i32, i32) {
+        let mut syntax_errors = 0;
+        let mut type_errors = 0;
+        let mut runtime_errors = 0;
+        for err in errs {
+            match err {
+                Error::NoFileGiven | Error::FileNotFound(_) | Error::IOError(_) => {
+                    unreachable!("Unexpected error when testing file\n{}", err)
+                }
+                Error::GitConflictError { .. } | Error::SyntaxError { .. } => syntax_errors += 1,
+                Error::TypeError { .. } | Error::CompileError { .. } => type_errors += 1,
+                Error::RuntimeError { .. } | Error::LuaError(_) => runtime_errors += 1,
+            }
+        }
+        (syntax_errors, type_errors, runtime_errors)
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    pub struct TestSettings {
+        pub print: bool,
+        pub syntax_errors: i32,
+        pub type_errors: i32,
+        pub runtime_errors: i32,
+    }
+
+    #[allow(dead_code)]
+    pub fn parse_test_settings(contents: String) -> TestSettings {
+        let mut print = true;
+        let mut syntax_errors = 0;
+        let mut type_errors = 0;
+        let mut runtime_errors = 0;
+        for line in contents.split("\n") {
+            if line.starts_with("// error: ") {
+                let line = line.strip_prefix("// error: ").unwrap().to_string();
+                match line.chars().next() {
+                    Some('@') => {
+                        syntax_errors += 1;
+                    }
+                    Some('$') => {
+                        type_errors += 1;
+                    }
+                    Some('#') => {
+                        runtime_errors += 1;
+                    }
+                    x => {
+                        panic!("Failed to parse test-file, unknown error prefix {:?}", x);
+                    }
+                }
+            } else if line.starts_with("// flags: ") {
+                for flag in line.split(" ").skip(2) {
+                    match flag {
+                        "no_print" => {
+                            print = false;
+                        }
+                        _ => {
+                            panic!("Unknown test flag '{}'", flag);
+                        }
+                    }
+                }
+            }
+        }
+
+        TestSettings { print, syntax_errors, type_errors, runtime_errors }
+    }
+}
+
 #[macro_export]
 macro_rules! assert_errs {
     ($result:expr, $expect:pat) => {
@@ -186,11 +256,7 @@ macro_rules! assert_errs {
         #[allow(unused_imports)]
         use sylt_tokenizer::Span;
         if !matches!(errs.as_slice(), $expect) {
-            eprintln!("===== Got =====");
-            for err in errs {
-                eprint!("{}", err);
-            }
-            eprintln!("===== Expect =====");
+            eprintln!("===== Expected =====");
             eprint!("{}\n\n", stringify!($expect));
             assert!(false);
         }
@@ -199,11 +265,13 @@ macro_rules! assert_errs {
 
 #[cfg(test)]
 mod bytecode {
+
     #[macro_export]
     macro_rules! test_file_run {
-        ($fn:ident, $path:literal, $print:expr, $errs:pat, $_:expr) => {
+        ($fn:ident, $path:literal) => {
             #[test]
             fn $fn() {
+                use crate::test::{count_errors, parse_test_settings};
                 #[allow(unused_imports)]
                 use sylt_common::error::RuntimeError;
                 #[allow(unused_imports)]
@@ -212,10 +280,34 @@ mod bytecode {
                 use sylt_common::Type;
 
                 let mut args = $crate::Args::default();
-                args.args = vec![format!("../{}", $path)];
-                args.verbosity = if $print { 1 } else { 0 };
-                let res = $crate::run_file(&args, ::sylt_std::sylt::_sylt_link());
-                $crate::assert_errs!(res, $errs);
+                let file = format!("../{}", $path);
+                let contents = std::fs::read_to_string(file.clone()).unwrap();
+                let settings = parse_test_settings(contents);
+                args.args = vec![file];
+                args.verbosity = if settings.print { 1 } else { 0 };
+
+                let (syn, ty, run) = match $crate::run_file(&args, ::sylt_std::sylt::_sylt_link()) {
+                    Err(res) => {
+                        println!("===== Got Errors =====");
+                        for err in &res {
+                            print!("{}", err);
+                        }
+                        count_errors(&res)
+                    }
+                    Ok(_) => {
+                        println!("===== Ran Correctly =====");
+                        (0, 0, 0)
+                    }
+                };
+                println!(" {} {} {}", syn, ty, run);
+                println!("===== Expected =====");
+                println!(
+                    " {} {} {}",
+                    settings.syntax_errors, settings.type_errors, settings.runtime_errors
+                );
+                assert_eq!(syn, settings.syntax_errors);
+                assert_eq!(ty, settings.type_errors);
+                assert_eq!(run, settings.runtime_errors);
             }
         };
     }
@@ -227,9 +319,10 @@ mod bytecode {
 mod lua {
     #[macro_export]
     macro_rules! test_file_lua {
-        ($fn:ident, $path:literal, $print:expr, $errs:pat, $any_runtime_errors:expr) => {
+        ($fn:ident, $path:literal) => {
             #[test]
             fn $fn() {
+                use crate::test::{count_errors, parse_test_settings};
                 use std::io::Write;
                 use std::process::{Command, Stdio};
                 #[allow(unused_imports)]
@@ -239,10 +332,12 @@ mod lua {
                 #[allow(unused_imports)]
                 use sylt_common::Type;
 
-                let file = format!("../{}", $path);
                 let mut args = $crate::Args::default();
-                args.args = vec![file.clone()];
-                args.verbosity = if $print { 1 } else { 0 };
+                let file = format!("../{}", $path);
+                let contents = std::fs::read_to_string(file.clone()).unwrap();
+                let settings = parse_test_settings(contents);
+                args.args = vec![file];
+                args.verbosity = if settings.print { 1 } else { 0 };
 
                 let mut child = Command::new("lua")
                     .stdin(Stdio::piped())
@@ -260,13 +355,21 @@ mod lua {
                     writer,
                 );
 
-                println!("Expect error: {}", $any_runtime_errors);
-                println!("Got error: {:?}", res.is_err());
-                if $any_runtime_errors {
-                    assert_errs!(res, []);
-                } else {
-                    assert_errs!(res, $errs);
-                }
+                let (syn, ty, _) = match res {
+                    Err(res) => {
+                        println!("===== Compile Errors =====");
+                        for err in &res {
+                            print!("{}", err);
+                        }
+                        count_errors(&res)
+                    }
+                    Ok(_) => {
+                        println!("===== Compiled Correctly =====");
+                        (0, 0, 0)
+                    }
+                };
+                assert_eq!(syn, settings.syntax_errors);
+                assert_eq!(ty, settings.type_errors);
 
                 let output = child.wait_with_output().unwrap();
                 // HACK(ed): Status is always 0 when piping to STDIN, atleast on my version of lua,
@@ -275,7 +378,7 @@ mod lua {
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 let success = output.status.success() && stderr.is_empty();
                 println!("Success: {}", success);
-                if $any_runtime_errors {
+                if settings.runtime_errors != 0 {
                     assert!(
                         !success,
                         "Program ran to completion when it should crash\n:STDOUT:\n{}\n\n:STDERR:\n{}\n",
