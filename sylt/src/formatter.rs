@@ -478,7 +478,7 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             } else {
                 write!(dest, " = ")?;
             }
-            write!(dest, "require {}", module)?;
+            write!(dest, "require \"{}\"", module)?;
         }
         StatementKind::Definition { ident, kind, ty, value } => {
             write_indents(dest, indent)?;
