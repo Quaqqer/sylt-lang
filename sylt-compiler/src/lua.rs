@@ -400,6 +400,11 @@ impl<'t> LuaCompiler<'t> {
                 self.compiler.frames.pop();
             }
 
+            RequireDefinition { ident, module, .. } => {
+                self.set_identifier(&ident.name, statement.span, ctx, ctx.namespace);
+                write!(self, "= require('{}')", module);
+            }
+
             #[rustfmt::skip]
             x => {
                 unreachable!("Not a valid outer statement {:?}", x)
@@ -436,7 +441,7 @@ impl<'t> LuaCompiler<'t> {
                 let slot = self.compiler.define(&ident.name, *kind, statement.span);
                 write!(self, "local");
                 self.write_slot(slot);
-                write!(self, "= require({})", module);
+                write!(self, "= require('{}')", module);
                 self.compiler.activate(slot);
             }
 

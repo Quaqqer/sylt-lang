@@ -444,6 +444,12 @@ impl Compiler {
                         num_constants += 1;
                         (Name::External(*kind), name.clone(), statement.span)
                     }
+                    RequireDefinition { ident: Identifier { name, .. }, kind, .. } => {
+                        let var = self.define(name, *kind, statement.span);
+                        self.activate(var);
+                        num_constants += 1;
+                        (Name::External(*kind), name.clone(), statement.span)
+                    }
 
                     // Handled later since we need type information.
                     IsCheck { .. } | EmptyStatement => continue,

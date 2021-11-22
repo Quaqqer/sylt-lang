@@ -778,10 +778,10 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
                 T::Require => {
                     let ctx = ctx.skip(1);
-                    let next = ctx.token();
+                    let module = ctx.token();
 
-                    match next {
-                        T::String(m) => (ctx, RequireDefinition { ident, kind, ty, module: m.clone() }),
+                    match module {
+                        T::String(m) => (ctx.skip(1), RequireDefinition { ident, kind, ty, module: m.clone() }),
                         _ => raise_syntax_error!(ctx, "Expected a string"),
                     }
                 }
@@ -852,6 +852,7 @@ pub fn outer_statement<'t>(ctx: Context<'t>) -> ParseResult<Statement> {
         Blob { .. }
         | Enum { .. }
         | Definition { .. }
+        | RequireDefinition { .. }
         | ExternalDefinition { .. }
         | Use { .. }
         | FromUse { .. }

@@ -513,13 +513,11 @@ impl<'t> BytecodeCompiler<'t> {
                 );
             }
 
-            RequireDefinition { ident, kind, .. } => {
-                if ctx.frame == 0 {
-                    self.set_identifier(&ident.name, statement.span, ctx, ctx.namespace);
-                } else {
-                    let slot = self.compiler.define(&ident.name, *kind, statement.span);
-                    self.compiler.activate(slot);
-                }
+            RequireDefinition { .. } => {
+                error!(
+                    self.compiler,
+                    statement.span, "Requires are not allowed when compiling to byte-code "
+                );
             }
 
             #[rustfmt::skip]
