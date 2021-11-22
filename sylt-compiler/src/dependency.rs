@@ -233,7 +233,8 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
 
         Ret { value } | StatementExpression { value } => dependencies(ctx, value),
 
-        ExternalDefinition { ty, .. } => type_dependencies(ctx, ty),
+        ExternalDefinition { ty, .. }
+        | RequireDefinition { ty, .. } => type_dependencies(ctx, ty),
 
         Blob { name, fields: sub_types } | Enum { name, variants: sub_types } => {
             ctx.shadow(&name);

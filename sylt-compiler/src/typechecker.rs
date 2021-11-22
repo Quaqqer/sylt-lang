@@ -611,6 +611,14 @@ impl TypeChecker {
                 Ok(None)
             }
 
+            // FIXME: Duplicate code from match statement in outer_statement()
+            StatementKind::RequireDefinition { ident, kind, ty, .. } => {
+                let ty = self.resolve_type(span, ctx, ty)?;
+                let var = Variable { ident: ident.clone(), ty, kind: *kind, span };
+                self.stack.push(var);
+                Ok(None)
+            }
+
             StatementKind::Loop { condition, body } => {
                 let condition = self.expression(condition, ctx)?;
                 let boolean = self.push_type(Type::Bool);
@@ -702,7 +710,8 @@ impl TypeChecker {
                 self.definition(statement, true, ctx)?;
             }
 
-            StatementKind::ExternalDefinition { ident, kind, ty } => {
+            StatementKind::ExternalDefinition { ident, kind, ty }
+            | StatementKind::RequireDefinition { ident, kind, ty, .. } => {
                 let ty = self.resolve_type(span, ctx, ty)?;
                 let var = Variable { ident: ident.clone(), ty, kind: *kind, span };
                 self.globals
