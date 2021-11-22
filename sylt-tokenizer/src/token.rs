@@ -156,6 +156,9 @@ pub enum Token {
     #[token("external")]
     External,
 
+    #[token("require")]
+    Require,
+
     #[token("<<<<<<<")]
     GitConflictBegin,
     #[token(">>>>>>>")]

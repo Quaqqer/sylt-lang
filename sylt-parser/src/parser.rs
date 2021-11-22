@@ -1271,6 +1271,10 @@ impl PrettyPrint for Statement {
                 write!(f, "<ExtDef> {} {:?} {}\n", ident.name, kind, ty)?;
                 return Ok(());
             }
+            SK::RequireDefinition { ident, kind, ty, module } => {
+                write!(f, "<ReqDef> {} {:?} {} {:?}\n", ident.name, kind, ty, module)?;
+                return Ok(());
+            }
             SK::Assignment { kind, target, value } => {
                 write!(f, "<Ass> {:?}\n", kind)?;
                 target.pretty_print(f, indent + 1)?;

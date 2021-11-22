@@ -101,6 +101,13 @@ pub enum StatementKind {
         ty: Type,
     },
 
+    RequireDefinition {
+        ident: Identifier,
+        kind: VarKind,
+        ty: Type,
+        module: Expression,
+    },
+
     /// Makes your code go either here or there.
     ///
     /// `if <expression> <statement> [else <statement>]`.
@@ -761,13 +768,22 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 (ctx.skip(1), kind, ty)
             };
 
-            if matches!(ctx.token(), T::External) {
-                (ctx.skip(1), ExternalDefinition { ident, kind, ty })
-            } else {
-                // The value to define the variable to.
-                let (ctx, value) = expression(ctx)?;
+            match ctx.token() {
+                T::External => {
+                    (ctx.skip(1), ExternalDefinition { ident, kind, ty })
+                }
 
-                (ctx, Definition { ident, kind, ty, value })
+                T::Require => {
+                    let ctx = ctx.skip(1);
+                    let (ctx, module) = expression(ctx)?;
+                    (ctx, RequireDefinition { ident, kind, ty, module })
+                }
+
+                _ => {
+                    let (ctx, value) = expression(ctx)?;
+
+                    (ctx, Definition { ident, kind, ty, value })
+                }
             }
         }
 
