@@ -101,11 +101,14 @@ pub enum StatementKind {
         ty: Type,
     },
 
+    /// Requires a lua module - type is needed for same reason as in ExternalDefinition.
+    ///
+    /// Example: `a: int = require "luasocket"`
     RequireDefinition {
         ident: Identifier,
         kind: VarKind,
         ty: Type,
-        module: Expression,
+        module: String,
     },
 
     /// Makes your code go either here or there.
@@ -775,8 +778,12 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
                 T::Require => {
                     let ctx = ctx.skip(1);
-                    let (ctx, module) = expression(ctx)?;
-                    (ctx, RequireDefinition { ident, kind, ty, module })
+                    let next = ctx.token();
+
+                    match next {
+                        T::String(m) => (ctx, RequireDefinition { ident, kind, ty, module: m.clone() }),
+                        _ => raise_syntax_error!(ctx, "Expected a string"),
+                    }
                 }
 
                 _ => {

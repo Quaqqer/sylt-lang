@@ -432,6 +432,13 @@ impl<'t> LuaCompiler<'t> {
                 self.compiler.activate(slot);
             }
 
+            RequireDefinition { ident, kind, ty, module } => {
+                let slot = self.compiler.define(&ident.name, *kind, statement.span);
+                write!(self, "local");
+                self.write_slot(slot);
+                write!(self, "= require({})", module);
+            }
+
             ExternalDefinition { .. } => {
                 error!(
                     self.compiler,
