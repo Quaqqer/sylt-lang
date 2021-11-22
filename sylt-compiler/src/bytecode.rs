@@ -513,6 +513,15 @@ impl<'t> BytecodeCompiler<'t> {
                 );
             }
 
+            RequireDefinition { ident, kind, .. } => {
+                if ctx.frame == 0 {
+                    self.set_identifier(&ident.name, statement.span, ctx, ctx.namespace);
+                } else {
+                    let slot = self.compiler.define(&ident.name, *kind, statement.span);
+                    self.compiler.activate(slot);
+                }
+            }
+
             #[rustfmt::skip]
             Assignment { target, value, kind } => {
                 use AssignableKind::*;
@@ -781,6 +790,7 @@ fn all_paths_return(statement: &Statement) -> bool {
         | StatementKind::Continue
         | StatementKind::Definition { .. }
         | StatementKind::EmptyStatement
+        | StatementKind::RequireDefinition { .. }
         | StatementKind::ExternalDefinition { .. }
         | StatementKind::IsCheck { .. }
         | StatementKind::StatementExpression { .. }

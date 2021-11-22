@@ -466,6 +466,20 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             }
             write!(dest, "external")?;
         }
+        StatementKind::RequireDefinition { ident, kind, ty, module } => {
+            assert!(!matches!(ty.kind, TypeKind::Implied), "Should not parse");
+
+            write_indents(dest, indent)?;
+            write_identifier(dest, ident)?;
+            write!(dest, ": ")?;
+            write_type(dest, indent, ty)?;
+            if kind.immutable() {
+                write!(dest, " : ")?;
+            } else {
+                write!(dest, " = ")?;
+            }
+            write!(dest, "require {}", module)?;
+        }
         StatementKind::Definition { ident, kind, ty, value } => {
             write_indents(dest, indent)?;
             write_identifier(dest, ident)?;
