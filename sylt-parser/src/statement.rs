@@ -103,7 +103,7 @@ pub enum StatementKind {
 
     /// Requires a lua module - type is needed for same reason as in ExternalDefinition.
     ///
-    /// Example: `a: int = require "luasocket"`
+    /// Example: `a: Luasocket = require "luasocket"`
     RequireDefinition {
         ident: Identifier,
         kind: VarKind,
