@@ -431,6 +431,7 @@ pub(crate) fn initialization_order<'a>(
                     ..
                 }
                 | ExternalDefinition { ident: Identifier { name, .. }, .. }
+                | RequireDefinition { ident: Identifier { name, .. }, .. }
                 | Definition { ident: Identifier { name, .. }, .. } => {
                     let mut ctx = Context { compiler, namespace, variables: Vec::new() };
                     to_order.insert(

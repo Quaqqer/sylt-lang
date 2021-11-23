@@ -448,7 +448,7 @@ impl Compiler {
                         let var = self.define(name, *kind, statement.span);
                         self.activate(var);
                         num_constants += 1;
-                        (Name::External(*kind), name.clone(), statement.span)
+                        (Name::Global(var), name.clone(), statement.span)
                     }
 
                     // Handled later since we need type information.
