@@ -467,6 +467,7 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             write!(dest, "external")?;
         }
         StatementKind::RequireDefinition { ident, kind, ty, module } => {
+            // FIXME: Duplicate code of external definition
             assert!(!matches!(ty.kind, TypeKind::Implied), "Should not parse");
 
             write_indents(dest, indent)?;
