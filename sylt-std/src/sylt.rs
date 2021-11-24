@@ -21,6 +21,16 @@ sylt_macro::extern_function!(
 
 sylt_macro::extern_function!(
     "sylt_std::sylt",
+    require,
+    ? "Requires a lua module.",
+    -> "fn str -> *MODULE",
+    [value] => {
+        Err(sylt_common::error::RuntimeError::ByteCodeError)
+    }
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
     dbg,
     ? "Prints values to stdout",
     -> "fn *X -> *X",

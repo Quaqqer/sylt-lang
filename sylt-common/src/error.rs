@@ -72,6 +72,7 @@ pub enum RuntimeError {
 
     AssertFailed,
     InvalidProgram,
+    ByteCodeError,
     Unreachable,
 }
 
@@ -329,6 +330,9 @@ impl fmt::Display for RuntimeError {
                     "Incorrect argument count, expected {} but got {}",
                     expected, given
                 )
+            }
+            RuntimeError::ByteCodeError => {
+                write!(f, "Cannot require modules when running in byte compiler.")
             }
             RuntimeError::IndexOutOfBounds(value, len, slot) => {
                 write!(
