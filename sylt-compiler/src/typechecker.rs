@@ -657,21 +657,31 @@ impl TypeChecker {
                 // should be set up correctly already.
                 let other = self.file_to_namespace[file];
                 for (ident, alias) in imports.iter() {
-                    let other_var = match &self.globals[&(other, ident.name.clone())] {
-                        Name::Global(var) => var.clone(),
-                        Name::Blob(_) | Name::Enum(_) | Name::Namespace(_) => continue,
-                    };
-                    let var = Variable {
-                        ident: alias.as_ref().unwrap_or(ident).clone(),
-                        ty: self.push_type(Type::Unknown),
-                        kind: VarKind::Const,
-                        span,
-                    };
-                    self.unify(span, ctx, var.ty, other_var.ty)?;
-                    self.globals.insert(
-                        (ctx.namespace, alias.as_ref().unwrap_or(ident).name.clone()),
-                        Name::Global(var),
-                    );
+                    let name = self.globals[&(other, ident.name.clone())].clone();
+                    let (namespace, identifier) = (ctx.namespace, alias.as_ref().unwrap_or(ident));
+
+                    match name {
+                        Name::Global(other_var) => {
+                            let var = Variable {
+                                ident: alias.as_ref().unwrap_or(ident).clone(),
+                                ty: self.push_type(Type::Unknown),
+                                kind: VarKind::Const,
+                                span,
+                            };
+                            self.unify(span, ctx, var.ty, other_var.ty)?;
+                            self.globals.insert(
+                                (namespace, identifier.name.clone()),
+                                Name::Global(var),
+                            );
+                        }
+
+                        Name::Blob(_) | Name::Enum(_) | Name::Namespace(_) => {
+                            self.globals.insert(
+                                (namespace, identifier.name.clone()),
+                                name.clone(),
+                            );
+                        }
+                    }
                 }
             }
             StatementKind::Enum { name, variants } => {
