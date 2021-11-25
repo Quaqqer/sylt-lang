@@ -678,7 +678,7 @@ impl TypeChecker {
                                 .insert((namespace, identifier.name.clone()), name.clone());
                         }
 
-                        Name::Namespace(_) => ()
+                        Name::Namespace(_) => (),
                     }
                 }
             }
