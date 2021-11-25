@@ -673,10 +673,12 @@ impl TypeChecker {
                                 .insert((namespace, identifier.name.clone()), Name::Global(var));
                         }
 
-                        Name::Blob(_) | Name::Enum(_) | Name::Namespace(_) => {
+                        Name::Blob(_) | Name::Enum(_) => {
                             self.globals
                                 .insert((namespace, identifier.name.clone()), name.clone());
                         }
+
+                        Name::Namespace(_) => ()
                     }
                 }
             }
