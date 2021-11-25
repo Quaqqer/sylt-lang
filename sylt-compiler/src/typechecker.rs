@@ -669,17 +669,13 @@ impl TypeChecker {
                                 span,
                             };
                             self.unify(span, ctx, var.ty, other_var.ty)?;
-                            self.globals.insert(
-                                (namespace, identifier.name.clone()),
-                                Name::Global(var),
-                            );
+                            self.globals
+                                .insert((namespace, identifier.name.clone()), Name::Global(var));
                         }
 
                         Name::Blob(_) | Name::Enum(_) | Name::Namespace(_) => {
-                            self.globals.insert(
-                                (namespace, identifier.name.clone()),
-                                name.clone(),
-                            );
+                            self.globals
+                                .insert((namespace, identifier.name.clone()), name.clone());
                         }
                     }
                 }
